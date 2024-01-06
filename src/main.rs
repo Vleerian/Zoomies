@@ -2,6 +2,8 @@ use anyhow::Error;
 use inquire::{validator::Validation, CustomType, Text};
 use serde::Deserialize;
 use serde_xml_rs::from_str;
+use spinoff::{spinners, Color, Spinner};
+use std::io::prelude::*;
 use std::time::Duration;
 use std::{
     fs::File,
@@ -65,15 +67,31 @@ fn beep() {
     print!(r"\x07")
 }
 
+/// Returns true if the file exists, and false if it does not
+fn check_for_file(filename: &str) -> bool {
+    Path::new(filename).exists()
+}
+
+/// Creates a file, then aborts execution to prevent using this file as-is
+fn create_file(filename: &str) -> ! {
+    let mut file = File::create(filename).expect("Failed to create file");
+    file.write_all(b"region_one\nregion_two\nregion_three")
+        .expect("Failed to write file");
+    panic!("Created {filename}. Please edit it to contain the names of your trigger regions.");
+}
+
 fn main() {
     // The validator used to ensure that the provided poll speed is valid
     let validator = |input: &u64| {
-        if input < &640 {
+        if input < &650 {
             Ok(Validation::Invalid("Poll speed minimum is 650ms".into()))
         } else {
             Ok(Validation::Valid)
         }
     };
+
+    // Check that trigger_list exists
+    let _ = check_for_file("trigger_list.txt") || create_file("trigger_list.txt");
 
     println!(r" _  _______  _______  _______  _______ _________ _______  _______  _ ");
     println!(r"( )/ ___   )(  ___  )(  ___  )(       )\__   __/(  ____ \(  ____ \( )");
@@ -85,9 +103,9 @@ fn main() {
     println!(r"   (_______/(_______)(_______)|/     \|\_______/(_______/\_______)   ");
     println!("--===ᕕ( ᐛ )ᕗ");
 
-    let main_nation = Text::new("Main Nation: ").prompt().unwrap();
+    let main_nation = Text::new("Main Nation:").prompt().unwrap();
 
-    let poll_speed = CustomType::new("Poll Speed (Min 650): ")
+    let poll_speed = CustomType::new("Poll Speed (Min 650):")
         .with_validator(validator)
         .prompt()
         .unwrap();
@@ -132,17 +150,20 @@ fn main() {
     trigger_data.sort_by(|a, b| a.lastupdate.cmp(&b.lastupdate));
     info!("Triggers sorted.");
 
-    let banner = "*".repeat(15);
     for trigger in trigger_data {
-        info!("Waiting for {}", trigger.id);
-        let updated: bool = false;
-        while !updated {
+        // info!("Waiting for {}", trigger.id);
+        let spinner_msg = format!("Waiting for {}...", trigger.id);
+        let mut spinner = Spinner::new(spinners::Clock, spinner_msg, Color::Yellow);
+        loop {
             sleep(Duration::from_millis(poll_speed));
             match get_last_update(&api_agent, &trigger.id) {
                 Ok(region) => {
                     if region.lastupdate != trigger.lastupdate {
                         beep();
-                        println!("{}\n{} HAS UPDATED\n{}", banner, region.id, banner);
+                        // println!("{}\n{} HAS UPDATED\n{}", banner, region.id, banner);
+                        let success_msg = format!("{} HAS UPDATED", region.id);
+                        spinner.success(&success_msg);
+                        break;
                     }
                 }
                 Err(_) => warn!("Fetch failed!"),
