@@ -96,13 +96,15 @@ fn main() {
     let api_agent: Agent = AgentBuilder::new()
         .user_agent(&user_agent)
         .timeout(Duration::from_secs(15))
-        .build();        
+        .build();
 
     let triggers = lines_from_file("trigger_list.txt")
         .expect("trigger_list.txt did not exist. Consult README.md for template.");
 
+    sleep(Duration::from_millis(poll_speed));
     let lu_banana = get_last_update(&api_agent, "banana")
         .unwrap();
+    sleep(Duration::from_millis(poll_speed));
     let lu_wzt = get_last_update(&api_agent, "warzone trinidad")
         .unwrap();
     let update_running : bool = lu_banana.lastupdate > lu_wzt.lastupdate;
