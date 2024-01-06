@@ -4,13 +4,12 @@ use inquire::{validator::Validation, CustomType, Text};
 use serde::Deserialize;
 use serde_xml_rs::from_str;
 use spinoff::{spinners, Color, Spinner};
-use std::io::prelude::*;
-use std::time::Duration;
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader},
+    time::Duration,
     path::Path,
     thread::sleep,
+    io::{self, BufRead, BufReader, prelude::*},
 };
 use ureq::{Agent, AgentBuilder};
 
