@@ -110,7 +110,7 @@ fn main() {
     let update_running : bool = lu_banana.lastupdate > lu_wzt.lastupdate;
 
     // Fetch and sort trigger data
-    let sort_time = (triggers.len() as u64) * poll_speed;
+    let sort_time = ((triggers.len() as u64) * poll_speed)/1000;
     info!("Sorting triggers. This will take ~{} seconds.", sort_time);
     let mut trigger_data : Vec<Region> = Vec::new();
     for trigger in triggers
