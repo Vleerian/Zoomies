@@ -1,4 +1,5 @@
 use anyhow::Error;
+use colored::Colorize;
 use inquire::{validator::Validation, CustomType, Text};
 use serde::Deserialize;
 use serde_xml_rs::from_str;
@@ -161,7 +162,7 @@ fn main() {
                     if region.lastupdate != trigger.lastupdate {
                         beep();
                         // println!("{}\n{} HAS UPDATED\n{}", banner, region.id, banner);
-                        let success_msg = format!("{} HAS UPDATED", region.id);
+                        let success_msg = format!("UPDATE DETECTED IN {}", region.id.to_uppercase()).green().bold();
                         spinner.success(&success_msg);
                         break;
                     }
