@@ -65,7 +65,7 @@ fn beep() {
 
 #[cfg(target_family = "unix")]
 fn beep() {
-    print!(r"\x07")
+    print!("\x07")
 }
 
 /// Returns true if the file exists, and false if it does not
