@@ -16,15 +16,21 @@ use ureq::{Agent, AgentBuilder};
 pub const LOG_THRESHHOLD: i32 = 30;
 
 macro_rules! log {
-    ($level:ident, $($arg:tt)*) => (println!("[{}] {}", stringify!($level), format!($($arg)*)));
+    ($level:ident, $color:expr, $($arg:tt)*) => (println!("[{}] {}", stringify!($level).color($color), format!($($arg)*)));
 }
 
 macro_rules! info {
-    ($($arg:tt)*) => (log!(INFO, $($arg)*));
+    ($($arg:tt)*) => (log!(INFO, "cyan", $($arg)*));
 }
 
 macro_rules! warn {
-    ($($arg:tt)*) => (log!(WARN, $($arg)*));
+    ($($arg:tt)*) => (log!(WARN, "yellow", $($arg)*));
+}
+
+macro_rules! crit {
+    ($($arg:tt)*) => {
+        panic!("[{}] {}", "CRIT".color("red"), format!($($arg)*));
+    }
 }
 
 #[derive(Deserialize)]
@@ -77,7 +83,7 @@ fn create_file(filename: &str) -> ! {
     let mut file = File::create(filename).expect("Failed to create file");
     file.write_all(b"region_one\nregion_two\nregion_three")
         .expect("Failed to write file");
-    panic!("Created {filename}. Please edit it to contain the names of your trigger regions.");
+    crit!("Created {filename}. Please edit it to contain the names of your trigger regions.");
 }
 
 fn main() {
