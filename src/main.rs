@@ -98,7 +98,7 @@ fn main() {
         .unwrap();
 
     let user_agent = format!(
-        "Zoomies/{0} (Developed by nation=Vleerian; In use by nation={1})",
+        "Zoomies/{0} (Developed by nation=Vleerian and nation=Volstrostia; In use by nation={1})",
         env!("CARGO_PKG_VERSION"),
         main_nation
     );
