@@ -6,10 +6,10 @@ use serde_xml_rs::from_str;
 use spinoff::{spinners, Color, Spinner};
 use std::{
     fs::File,
-    time::Duration,
+    io::{self, prelude::*, BufRead, BufReader},
     path::Path,
     thread::sleep,
-    io::{self, BufRead, BufReader, prelude::*},
+    time::Duration,
 };
 use ureq::{Agent, AgentBuilder};
 
@@ -168,7 +168,10 @@ fn main() {
                     if region.lastupdate != trigger.lastupdate {
                         beep();
                         // println!("{}\n{} HAS UPDATED\n{}", banner, region.id, banner);
-                        let success_msg = format!("UPDATE DETECTED IN {}", region.id.to_uppercase()).green().bold();
+                        let success_msg =
+                            format!("UPDATE DETECTED IN {}", region.id.to_uppercase())
+                                .green()
+                                .bold();
                         spinner.success(&success_msg);
                         break;
                     }
