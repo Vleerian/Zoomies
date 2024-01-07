@@ -112,6 +112,7 @@ fn main() {
     let main_nation = Text::new("Main Nation:").prompt().unwrap();
 
     let poll_speed = CustomType::new("Poll Speed (Min 650):")
+        .with_default(650)
         .with_validator(validator)
         .prompt()
         .unwrap();
