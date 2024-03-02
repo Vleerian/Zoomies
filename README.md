@@ -1,4 +1,8 @@
 # `zoomies`
+<p align="center">
+	<img src="/assets/Cat"><br>
+  Miaou Miaou!
+</p>
 ## About
 
 `zoomies` is a script that takes a list of NationStates regions, sorts them by update order, and informs the user when
