@@ -283,7 +283,7 @@ fn main() {
                     if region.lastupdate != trigger.lastupdate {
                         beep();
                         let timestring = get_webhook_timestring();
-                        let mut comment = String::from("");
+                        let comment = String::from("");
                         let update_message = if comment == "" {
                             format!("{} - {}", trigger.region, comment)
                         } else {
