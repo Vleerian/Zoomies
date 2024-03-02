@@ -218,7 +218,8 @@ fn main() {
 
     // Fetch and sort trigger data
     let sort_time = ((triggers.len() as u64) * poll_speed) / 1000;
-    info!("Processing triggers. This will take ~{} seconds.", sort_time);
+    let spinner_msg = format!("Processing triggers. This will take ~{} seconds.", sort_time);
+    let mut spinner = Spinner::new(spinners::Cute, spinner_msg, Color::Yellow);
     let mut trigger_data: Vec<Trigger> = Vec::new();
     for mut trigger in triggers {
         sleep(Duration::from_millis(poll_speed));
@@ -254,11 +255,11 @@ fn main() {
         }
     }
     trigger_data.sort_by(|a, b| a.lastupdate.cmp(&b.lastupdate));
-    info!("Triggers sorted.");
+    spinner.success("Triggers sorted");
 
     for trigger in trigger_data {
         let spinner_msg = format!("Waiting for {}...", trigger.region);
-        let mut spinner = Spinner::new(spinners::Clock, spinner_msg, Color::Yellow);
+        let mut spinner = Spinner::new(spinners::Cute, spinner_msg, Color::Cyan);
         loop {
             sleep(Duration::from_millis(poll_speed));
             match get_last_update(&api_agent, &trigger.region) {
