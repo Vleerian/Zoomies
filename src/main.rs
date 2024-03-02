@@ -161,7 +161,7 @@ fn main() {
         .with_validator(validator)
         .prompt().unwrap());
 
-    info!("Running as {} at {}ms.", main_nation, poll_speed);
+    info!("Zoomies v{} Running as {} at {}ms.", env!("CARGO_PKG_VERSION"), main_nation, poll_speed);
 
     // Set the user agent and initialize the API agent
     let user_agent = format!(
