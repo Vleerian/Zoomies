@@ -150,26 +150,17 @@ fn main() {
     let trigger_file = args.filepath.unwrap_or("trigger_list.txt".to_string());
     let _ = check_for_file(trigger_file.as_str()) || create_file(trigger_file.as_str());
 
-    // TODO: Move splash to separate rs file
     // Print the splash
-    println!(r" _  _______  _______  _______  _______ _________ _______  _______  _ ");
-    println!(r"( )/ ___   )(  ___  )(  ___  )(       )\__   __/(  ____ \(  ____ \( )");
-    println!(r" \|\/   )  || (   ) || (   ) || () () |   ) (   | (    \/| (    \/ \|");
-    println!(r"       /   )| |   | || |   | || || || |   | |   | (__    | (_____    ");
-    println!(r"      /   / | |   | || |   | || |(_)| |   | |   |  __)   (_____  )   ");
-    println!(r"     /   /  | |   | || |   | || |   | |   | |   | (            ) |   ");
-    println!(r"    /   (_/\| (___) || (___) || )   ( |___) (___| (____/\/\____) |   ");
-    println!(r"   (_______/(_______)(_______)|/     \|\_______/(_______/\_______)   ");
-    println!("--===ᕕ( ᐛ )ᕗ");
+    println!(include_str!("splash.txt"));
 
     // Request main nation if it was not provided in args
     let main_nation = args.main_nation.unwrap_or_else(|| Text::new("Main Nation:").prompt().unwrap());
 
-    let poll_speed = CustomType::new("Poll Speed (Min 650):")
+    let poll_speed = args.poll_speed.unwrap_or_else(|| CustomType::new("Poll Speed (Min 650):")
         .with_default(650)
         .with_validator(validator)
-        .prompt()
-        .unwrap());
+        .prompt().unwrap());
+
     info!("Running as {} at {}ms.", main_nation, poll_speed);
 
     // Set the user agent and initialize the API agent
