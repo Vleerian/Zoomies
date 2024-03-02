@@ -58,11 +58,15 @@ struct Args
 
     // Optional filename for trigger list
     #[arg(long)]
-    trigger_list: Option<String>,
+    filepath: Option<String>,
 
     // Optional Webhook URL, pings will only happen if this is present
     #[arg(long)]
-    webhook: Option<String>
+    webhook: Option<String>,
+
+    // Optional: Raidfile mode, loads a Quickdraw raidfile instead of triggerlist
+    #[arg(long)]
+    raidfile: Option<bool>
 }
 
 // Yoinked from https://stackoverflow.com/questions/30801031/read-a-file-and-get-an-array-of-strings
@@ -139,7 +143,7 @@ fn main() {
     let args = Args::parse();
     
     // Check that trigger_list exists
-    let trigger_file = args.trigger_list.unwrap_or("trigger_list.txt".to_string());
+    let trigger_file = args.filepath.unwrap_or("trigger_list.txt".to_string());
     let _ = check_for_file(trigger_file.as_str()) || create_file(trigger_file.as_str());
 
     // TODO: Move splash to separate rs file
@@ -176,8 +180,30 @@ fn main() {
         .build();
 
     // Load the triggers
-    let triggers = lines_from_file("trigger_list.txt")
+    let mut triggers = lines_from_file(trigger_file)
         .expect("trigger_list.txt did not exist. Consult README.md for template.");
+    // If it is a raidfile, some parsing is required
+    if args.raidfile.is_some() && args.raidfile.unwrap()
+    {
+        let mut tmp : Vec<String> = Vec::new();
+        for trigger in triggers {
+            if !trigger.contains("http")
+            {
+                continue;
+            }
+
+            let mut target = trigger
+                .split(&['=', ' ']).nth_back(1)
+                .unwrap().replace("^", "")
+                .to_string();
+            if !trigger.contains("template-")
+            {
+                target.push('!');
+            }
+            tmp.push(target);
+        }
+        triggers = tmp;
+    }
 
     // Determine if zoomies should post to webhooks
     let do_pings = args.webhook.is_some();
