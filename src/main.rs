@@ -5,7 +5,11 @@ use serde::Deserialize;
 use serde_xml_rs::from_str;
 use spinoff::{spinners, Color, Spinner};
 use std::{
-    fs::File, io::{self, prelude::*, BufRead, BufReader}, path::Path, thread::sleep, time::Duration
+    fs::File,
+    io::{self, prelude::*, BufRead, BufReader},
+    path::Path,
+    thread::sleep,
+    time::Duration,
 };
 use ureq::{Agent, AgentBuilder};
 use clap::Parser;
@@ -161,8 +165,8 @@ fn main() {
     // Request main nation if it was not provided in args
     let main_nation = args.main_nation.unwrap_or_else(|| Text::new("Main Nation:").prompt().unwrap());
 
-    // Request poll speed if not provided in args
-    let poll_speed = args.poll_speed.unwrap_or_else(|| CustomType::new("Poll Speed (Min 650):")
+    let poll_speed = CustomType::new("Poll Speed (Min 650):")
+        .with_default(650)
         .with_validator(validator)
         .prompt()
         .unwrap());
