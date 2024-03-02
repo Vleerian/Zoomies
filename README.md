@@ -1,6 +1,6 @@
 # `zoomies`
 <p align="center">
-	<img src="/assets/Cat"><br>
+	<img src="/assets/Cat.png"><br>
   Miaou Miaou!
 </p>
 ## About
