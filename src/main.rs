@@ -44,7 +44,8 @@ struct Trigger
 {
     region: String,
     lastupdate: i32,
-    ping: bool,
+    updated_ping: bool,
+    waiting_ping: bool,
     comment: Option<String>
 }
 
@@ -189,6 +190,7 @@ fn main() {
     if args.raidfile.is_some() && args.raidfile.unwrap()
     {
         let mut tmp : Vec<String> = Vec::new();
+        let mut targ_store = String::from("");
         for trigger in triggers {
             if !trigger.contains("http")
             {
@@ -201,7 +203,11 @@ fn main() {
                 .to_string();
             if !trigger.contains("template-")
             {
-                target.push('!');
+                targ_store = target.clone();
+            }
+            else
+            {
+                target += format!("@ #{}", targ_store).as_str();
             }
             tmp.push(target);
         }
@@ -222,7 +228,8 @@ fn main() {
     let mut trigger_data: Vec<Trigger> = Vec::new();
     for mut trigger in triggers {
         sleep(Duration::from_millis(poll_speed));
-        let mut ping : bool = false;
+        let mut updated_ping : bool = false;
+        let mut waiting_ping : bool = false;
         
         // Comment parsing
         let clone = trigger.clone();
@@ -233,7 +240,12 @@ fn main() {
         // Detect if a trigger wants to be pinged
         if trigger.contains("!") {
             trigger = trigger.replace("!", "");
-            ping = true;
+            updated_ping = true;
+        }
+        if trigger.contains("@")
+        {
+            trigger = trigger.replace("@", "");
+            waiting_ping  = true;
         }
 
         // Fetch inital last update data and initialize trigger structs
@@ -245,7 +257,8 @@ fn main() {
                     trigger_data.push(Trigger {
                         region: region.id,
                         lastupdate: region.lastupdate,
-                        ping: ping,
+                        updated_ping,
+                        waiting_ping,
                         comment: comment
                     })
                 }
@@ -266,14 +279,22 @@ fn main() {
                     if region.lastupdate != trigger.lastupdate {
                         beep();
                         let timestring = get_webhook_timestring();
+                        let mut comment = String::from("");
                         let update_message = if trigger.comment.is_some() {
-                            format!("{} - {}", trigger.region, trigger.comment.unwrap())
+                            comment = trigger.comment.unwrap().to_string();
+                            format!("{} - {}", trigger.region, comment)
                         } else {
                             format!("UPDATE DETECTED IN {}", trigger.region.to_uppercase())
                         };
                         
-                        if trigger.ping && do_pings {
-                            let _ = api_agent.post(&webhook).send_json(include!("webhook.rs"));
+                        if do_pings
+                        {
+                            if trigger.updated_ping {
+                                let _ = api_agent.post(&webhook).send_json(include!("updated_ping.rs"));
+                            }
+                            if trigger.waiting_ping {
+                                let _ = api_agent.post(&webhook).send_json(include!("waiting_ping.rs"));
+                            }
                         }
 
                         let success_msg = format!("{} {}", timestring, update_message).green().bold();
