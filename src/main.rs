@@ -272,6 +272,10 @@ fn main() {
     for trigger in trigger_data {
         let spinner_msg = format!("Waiting for {}...", trigger.region);
         let mut spinner = Spinner::new(spinners::Cute, spinner_msg, Color::Cyan);
+        let comment = trigger.comment.unwrap_or_else(|| "".to_string());
+        if do_pings && trigger.waiting_ping {
+            let _ = api_agent.post(&webhook).send_json(include!("waiting_ping.rs"));
+        }
         loop {
             sleep(Duration::from_millis(poll_speed));
             match get_last_update(&api_agent, &trigger.region) {
@@ -280,21 +284,14 @@ fn main() {
                         beep();
                         let timestring = get_webhook_timestring();
                         let mut comment = String::from("");
-                        let update_message = if trigger.comment.is_some() {
-                            comment = trigger.comment.unwrap().to_string();
+                        let update_message = if comment == "" {
                             format!("{} - {}", trigger.region, comment)
                         } else {
                             format!("UPDATE DETECTED IN {}", trigger.region.to_uppercase())
                         };
                         
-                        if do_pings
-                        {
-                            if trigger.updated_ping {
-                                let _ = api_agent.post(&webhook).send_json(include!("updated_ping.rs"));
-                            }
-                            if trigger.waiting_ping {
-                                let _ = api_agent.post(&webhook).send_json(include!("waiting_ping.rs"));
-                            }
+                        if do_pings && trigger.updated_ping {
+                            let _ = api_agent.post(&webhook).send_json(include!("updated_ping.rs"));
                         }
 
                         let success_msg = format!("{} {}", timestring, update_message).green().bold();
