@@ -150,6 +150,10 @@ fn main() {
     let trigger_file = args.filepath.unwrap_or("trigger_list.txt".to_string());
     let _ = check_for_file(trigger_file.as_str()) || create_file(trigger_file.as_str());
 
+    // Determine if zoomies should post to webhooks
+    let do_pings = args.webhook.is_some();
+    let webhook = args.webhook.unwrap_or_else(|| "".to_string());
+
     // Print the splash
     println!(include_str!("splash.txt"));
 
@@ -161,8 +165,6 @@ fn main() {
         .with_validator(validator)
         .prompt().unwrap());
 
-    info!("Zoomies v{} Running as {} at {}ms.", env!("CARGO_PKG_VERSION"), main_nation, poll_speed);
-
     // Set the user agent and initialize the API agent
     let user_agent = format!(
         "Zoomies/{0} (Developed by nation=Vleerian and nation=Volstrostia; In use by nation={1})",
@@ -173,6 +175,12 @@ fn main() {
         .user_agent(&user_agent)
         .timeout(Duration::from_secs(15))
         .build();
+
+    info!("Zoomies v{} Running as {} at {}ms.", env!("CARGO_PKG_VERSION"), main_nation, poll_speed);
+    if do_pings
+    {
+        let _ = api_agent.post(&webhook).send_json(include!("notify_running.rs"));
+    }
 
     // Load the triggers
     let mut triggers = lines_from_file(trigger_file)
@@ -199,10 +207,6 @@ fn main() {
         }
         triggers = tmp;
     }
-
-    // Determine if zoomies should post to webhooks
-    let do_pings = args.webhook.is_some();
-    let webhook = args.webhook.unwrap_or_else(|| "".to_string());
 
     // Get update data
     sleep(Duration::from_millis(poll_speed));
