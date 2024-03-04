@@ -158,24 +158,41 @@ fn main() {
     // Print the splash
     println!(include_str!("splash.txt"));
 
+    // Set the user agent and initialize the API agent
+    let mut api_agent: Agent = AgentBuilder::new()
+        .user_agent(&format!(
+            "Zoomies/{0} (Developed by nation=Vleerian and nation=Volstrostia;)",
+            env!("CARGO_PKG_VERSION")
+        ))
+        .timeout(Duration::from_secs(15))
+        .build();
+
     // Request main nation if it was not provided in args
-    let main_nation = args.main_nation.unwrap_or_else(|| Text::new("Main Nation:").prompt().unwrap());
+    let mut main_nation = args.main_nation.unwrap_or_else(|| Text::new("Main Nation:").prompt().unwrap());
+    loop {
+        match api_agent.get(format!("https://www.nationstates.net/cgi-bin/api.cgi?nation={}", main_nation).as_str())
+            .call() {
+                Ok(_) => { break },
+                Err(_) => {
+                    warn!("Nation {} does not exist.", main_nation);
+                    main_nation = Text::new("Main Nation:").prompt().unwrap();       
+                }
+            }
+    }
+
+    api_agent = AgentBuilder::new()
+        .user_agent(&format!(
+            "Zoomies/{0} (Developed by nation=Vleerian and nation=Volstrostia;); In use by {1}",
+            env!("CARGO_PKG_VERSION"),
+            main_nation
+        ))
+        .timeout(Duration::from_secs(15))
+        .build();
 
     let poll_speed = args.poll_speed.unwrap_or_else(|| CustomType::new("Poll Speed (Min 650):")
         .with_default(650)
         .with_validator(validator)
         .prompt().unwrap());
-
-    // Set the user agent and initialize the API agent
-    let user_agent = format!(
-        "Zoomies/{0} (Developed by nation=Vleerian and nation=Volstrostia; In use by nation={1})",
-        env!("CARGO_PKG_VERSION"),
-        main_nation
-    );
-    let api_agent: Agent = AgentBuilder::new()
-        .user_agent(&user_agent)
-        .timeout(Duration::from_secs(15))
-        .build();
 
     info!("Zoomies v{} Running as {} at {}ms.", env!("CARGO_PKG_VERSION"), main_nation, poll_speed);
     if do_pings
