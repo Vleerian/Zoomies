@@ -1,11 +1,11 @@
 use anyhow::Error;
 use colored::Colorize;
 use inquire::{validator::Validation, CustomType, Text};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_xml_rs::from_str;
 use spinoff::{spinners, Color, Spinner};
 use std::{
-    fs::File,
+    fs::{self, File},
     io::{self, prelude::*, BufRead, BufReader},
     path::Path,
     thread::sleep,
@@ -14,6 +14,8 @@ use std::{
 use ureq::{Agent, AgentBuilder};
 use clap::Parser;
 use chrono::prelude::*;
+use regex::Regex;
+use lazy_static::lazy_static;
 
 macro_rules! log {
     ($level:ident, $color:expr, $($arg:tt)*) => (println!("[{}] {}", stringify!($level).color($color), format!($($arg)*)));
@@ -33,6 +35,11 @@ macro_rules! crit {
     }
 }
 
+lazy_static! {
+    static ref RAIDFILE_RE : Regex = Regex::new(r"region=(?<region>[\w_ ]*).*\((?<timing>[0-9:sm]*)").unwrap();
+    static ref TRIGLIST_RE : Regex = Regex::new(r"(?<trigger>[\w _]+)[^@]*?(?:@(?<target>[\w _]+))?[^#]*(?:#(?<comment>[\w _]+))?").unwrap();
+}
+
 #[derive(Deserialize)]
 struct Region {
     id: String,
@@ -40,13 +47,120 @@ struct Region {
     lastupdate: i32,
 }
 
-struct Trigger
+#[derive(Clone, Deserialize, Serialize)]
+struct TriggerPrecursor
 {
     region: String,
-    lastupdate: i32,
+    target: Option<String>,
     updated_ping: bool,
     waiting_ping: bool,
     comment: Option<String>
+}
+
+struct Trigger
+{
+    region : String,
+    target : Option<String>,
+    lastupdate : i32,
+    updated_ping : bool,
+    waiting_ping : bool,
+    comment : Option<String>
+}
+
+impl TriggerPrecursor {
+    pub fn from_raidfile(raidfile_line: &String, target : Option<TriggerPrecursor>) -> Option<TriggerPrecursor>
+    {
+        let Some(capture) = RAIDFILE_RE.captures(raidfile_line.as_str()) else {
+            println!("Failed");
+            return None;
+        };
+
+        let mut comment = (&capture["timing"]).to_string();
+        let mut target_str : Option<String> = None;
+        let targ_is_some = target.is_some();
+        if targ_is_some
+        {
+            let tmp = target.clone().unwrap().region;
+            target_str = Some(tmp.clone());
+            comment = format!("Next target, {}! ({})", tmp, target?.comment?)
+        }
+
+        Some(TriggerPrecursor {
+            region : (&capture["region"]).to_string(),
+            target : target_str,
+            updated_ping : false,
+            waiting_ping : targ_is_some,
+            comment : Some(comment)
+        })
+    }
+
+    pub fn from_triggerlist(triggerlist_line: &String) -> Option<TriggerPrecursor>
+    {
+        let Some(capture) = TRIGLIST_RE.captures(triggerlist_line.as_str()) else {
+            println!("Failed");
+            return None;
+        };
+
+        let r = match capture.name("target") { Some(reg) => Some(reg.as_str().to_string()), None => None };
+
+        let c = match capture.name("comment") { Some(reg) => Some(format!("Next Target, {}! ", reg.as_str().to_string())), None => None };
+        
+        Some(TriggerPrecursor {
+            region : canonicalize(&capture["trigger"]),
+            target : r,
+            updated_ping : triggerlist_line.contains("!"),
+            waiting_ping : triggerlist_line.contains("$"),
+            comment : c
+        })
+    }
+    pub fn from_file(filename: &String) -> Option<Vec<TriggerPrecursor>>
+    {
+        let trigger_lines = lines_from_file(filename)
+            .expect("trigger_list.txt did not exist. Consult README.md for template.");
+        // Convert the triggers into trigger precursors
+        let mut precursors : Vec<TriggerPrecursor> = Vec::new();
+        let mut tmp : Option<TriggerPrecursor> = None;
+
+        // Detect if it's a raidfile
+        let raidfile_mode = trigger_lines.first().unwrap().contains("1)");
+        info!("Parsing file, mode : {}", if raidfile_mode {"RaidFile"} else {"TriggerList"});
+
+        for mut trigger in trigger_lines {
+            trigger = trigger.trim().to_string();
+            if trigger == "" {
+                continue;
+            }
+            let precursor : TriggerPrecursor;
+            if raidfile_mode
+            {
+                precursor = match TriggerPrecursor::from_raidfile(&trigger, tmp.clone()) {
+                    Some(precursor) => precursor,
+                    None => {
+                        println!("Failed to parse {}", trigger);
+                        continue;
+                    }
+                };
+                // Store the current region if we're looking at the target (triggers are template-none pages)
+                if !trigger.contains("template-")
+                {
+                    tmp = Some(precursor.clone());
+                }
+            }
+            else
+            {
+                precursor = match TriggerPrecursor::from_triggerlist(&trigger) {
+                    Some(precursor) => precursor,
+                    None => {
+                        println!("Failed to parse {}", trigger);
+                        continue;
+                    }
+                }
+            }
+            precursors.push(precursor);
+        }
+
+        Some(precursors)
+    }
 }
 
 #[derive(Parser)]
@@ -201,35 +315,7 @@ fn main() {
     }
 
     // Load the triggers
-    let mut triggers = lines_from_file(trigger_file)
-        .expect("trigger_list.txt did not exist. Consult README.md for template.");
-    // If it is a raidfile, some parsing is required
-    if args.raidfile.is_some() && args.raidfile.unwrap()
-    {
-        let mut tmp : Vec<String> = Vec::new();
-        let mut targ_store = String::from("");
-        for trigger in triggers {
-            if !trigger.contains("http")
-            {
-                continue;
-            }
-
-            let mut target = trigger
-                .split(&['=', ' ']).nth_back(1)
-                .unwrap().replace("^", "")
-                .to_string();
-            if !trigger.contains("template-")
-            {
-                targ_store = target.clone();
-            }
-            else
-            {
-                target += format!("@ #{}", targ_store).as_str();
-            }
-            tmp.push(target);
-        }
-        triggers = tmp;
-    }
+    let precursors = TriggerPrecursor::from_file(&trigger_file).unwrap();
 
     // Get update data
     sleep(Duration::from_millis(poll_speed));
@@ -239,48 +325,29 @@ fn main() {
     let update_running: bool = lu_banana.lastupdate > lu_wzt.lastupdate;
 
     // Fetch and sort trigger data
-    let sort_time = ((triggers.len() as u64) * poll_speed) / 1000;
+    let sort_time = ((precursors.len() as u64) * poll_speed) / 1000;
     let spinner_msg = format!("Processing triggers. This will take ~{} seconds.", sort_time);
     let mut spinner = Spinner::new(spinners::Cute, spinner_msg, Color::Yellow);
     let mut trigger_data: Vec<Trigger> = Vec::new();
-    for mut trigger in triggers {
+    for trigger in precursors {
         sleep(Duration::from_millis(poll_speed));
-        let mut updated_ping : bool = false;
-        let mut waiting_ping : bool = false;
-        
-        // Comment parsing
-        let clone = trigger.clone();
-        let mut split = clone.split('#');
-        trigger = split.next().unwrap().to_string();
-        let comment = split.next().map_or(None, |s| Some(s.to_string()));
-        
-        // Detect if a trigger wants to be pinged
-        if trigger.contains("!") {
-            trigger = trigger.replace("!", "");
-            updated_ping = true;
-        }
-        if trigger.contains("@")
-        {
-            trigger = trigger.replace("@", "");
-            waiting_ping  = true;
-        }
-
         // Fetch inital last update data and initialize trigger structs
-        match get_last_update(&api_agent, &trigger) {
+        match get_last_update(&api_agent, &trigger.region) {
             Ok(region) => {
                 if update_running && lu_banana.lastupdate < region.lastupdate {
                     warn!("{} has already updated.", region.id);
                 } else {
                     trigger_data.push(Trigger {
                         region: region.id,
+                        target : trigger.target,
                         lastupdate: region.lastupdate,
-                        updated_ping,
-                        waiting_ping,
-                        comment: comment
+                        updated_ping : trigger.updated_ping,
+                        waiting_ping : trigger.waiting_ping,
+                        comment: trigger.comment
                     })
                 }
             }
-            Err(_) => warn!("Could not fetch Last Update data for {}.", trigger),
+            Err(_) => warn!("Could not fetch Last Update data for {}.", trigger.region),
         }
     }
     trigger_data.sort_by(|a, b| a.lastupdate.cmp(&b.lastupdate));
@@ -291,7 +358,15 @@ fn main() {
         let mut spinner = Spinner::new(spinners::Cute, spinner_msg, Color::Cyan);
         let comment = trigger.comment.unwrap_or_else(|| "".to_string());
         if do_pings && trigger.waiting_ping {
-            let _ = api_agent.post(&webhook).send_json(include!("waiting_ping.rs"));
+            if trigger.target.is_some()
+            {
+                let target = trigger.target.unwrap();
+                info!("Wait for {} (Trigger {})", target, trigger.region);
+                match api_agent.post(&webhook).send_json(include!("waiting_ping.rs")) {
+                    Ok(_) => {},
+                    Err(_) => warn!("Failed to post wait webhook for {}", trigger.region)
+                }
+            }
         }
         loop {
             sleep(Duration::from_millis(poll_speed));
@@ -308,7 +383,10 @@ fn main() {
                         };
                         
                         if do_pings && trigger.updated_ping {
-                            let _ = api_agent.post(&webhook).send_json(include!("updated_ping.rs"));
+                            match api_agent.post(&webhook).send_json(include!("updated_ping.rs")) {
+                                Ok(_) => {},
+                                Err(_) => warn!("Failed to post update webhook for {}", trigger.region)
+                            }
                         }
 
                         let success_msg = format!("{} {}", timestring, update_message).green().bold();
