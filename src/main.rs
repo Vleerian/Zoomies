@@ -210,7 +210,8 @@ fn canonicalize(string: &str) -> String {
     return str::replace(output.as_str().trim(), " ", "_");
 }
 
-fn get_last_update(agent: &Agent, region: &str) -> Result<Region, Error> {
+fn get_last_update(agent: &Agent, poll_speed: u64, region: &str) -> Result<Region, Error> {
+    sleep(Duration::from_millis(poll_speed));
     let url = format!(
         "https://www.nationstates.net/cgi-bin/api.cgi?region={}&q=lastupdate",
         canonicalize(region)
@@ -333,10 +334,8 @@ fn main() {
     let precursors = TriggerPrecursor::from_file(&trigger_file).unwrap();
 
     // Get update data
-    sleep(Duration::from_millis(poll_speed));
-    let mut lu_banana = get_last_update(&api_agent, "banana").unwrap();
-    sleep(Duration::from_millis(poll_speed));
-    let lu_wzt = get_last_update(&api_agent, "warzone trinidad").unwrap();
+    let mut lu_banana = get_last_update(&api_agent, poll_speed, "banana").unwrap();
+    let lu_wzt = get_last_update(&api_agent, poll_speed, "warzone trinidad").unwrap();
     let mut update_running: bool = lu_banana.lastupdate > lu_wzt.lastupdate;
 
     // Fetch and sort trigger data
@@ -348,9 +347,8 @@ fn main() {
     let mut spinner = Spinner::new(spinners::Cute, spinner_msg, Color::Yellow);
     let mut trigger_data: Vec<Trigger> = Vec::new();
     for trigger in precursors {
-        sleep(Duration::from_millis(poll_speed));
         // Fetch inital last update data and initialize trigger structs
-        match get_last_update(&api_agent, &trigger.region) {
+        match get_last_update(&api_agent, poll_speed, &trigger.region) {
             Ok(region) => {
                 if update_running && lu_banana.lastupdate < region.lastupdate {
                     warn!("{} has already updated.", region.id);
@@ -375,8 +373,7 @@ fn main() {
     if !update_running {
         info!("Update has not begun, waiting for banana");
         while !update_running {
-            sleep(Duration::from_millis(poll_speed));
-            match get_last_update(&api_agent, "banana".to_string().borrow()) {
+            match get_last_update(&api_agent, poll_speed, "banana".to_string().borrow()) {
                 Result::Ok(region) => {
                     if region.lastupdate > lu_banana.lastupdate {
                         info!("Update has started.");
@@ -416,8 +413,7 @@ fn main() {
             }
         }
         loop {
-            sleep(Duration::from_millis(poll_speed));
-            let region = match get_last_update(&api_agent, &trigger.region) {
+            let region = match get_last_update(&api_agent, poll_speed, &trigger.region) {
                 Result::Ok(r) => r,
                 Err(_) => {
                     warn!("Failed to fetch!");
