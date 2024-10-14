@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_xml_rs::from_str;
 use spinoff::{spinners, Color, Spinner};
 use std::{
+    borrow::Borrow,
+    fmt::{format, Debug},
     fs::{self, File},
     io::{self, prelude::*, BufRead, BufReader},
     path::Path,
@@ -243,37 +245,6 @@ fn create_file(filename: &str) -> ! {
     crit!("Created {filename}. Please edit it to contain the names of your trigger regions.");
 }
 
-/// Creates a timestamp. It is moved to EST, since that's the NS servers' timezone
-fn get_webhook_timestring() -> String {
-    let offset = FixedOffset::east_opt((5 * 60 * 60) * -1).unwrap();
-    let now = Utc::now().with_timezone(&offset);
-
-    let (is_pm, hour) = now.hour12();
-    format!(
-        "{:02}:{:02}:{:02} {}",
-        hour,
-        now.minute(),
-        now.second(),
-        if is_pm { "PM" } else { "AM" }
-    )
-}
-
-fn check_for_update(api_agent: &Agent, poll_speed: u64, trigger: &Trigger) -> Result<bool, Error> {
-    sleep(Duration::from_millis(poll_speed));
-    match get_last_update(&api_agent, &trigger.region) {
-        Result::Ok(region) => {
-            if region.lastupdate != trigger.lastupdate {
-                return Ok(true);
-            }
-            Ok(false)
-        }
-        Err(_) => {
-            warn!("Fetch failed!");
-            Ok(false)
-        }
-    }
-}
-
 fn main() {
     // The validator used to ensure that the provided poll speed is valid
     let validator = |input: &u64| {
@@ -363,7 +334,7 @@ fn main() {
 
     // Get update data
     sleep(Duration::from_millis(poll_speed));
-    let lu_banana = get_last_update(&api_agent, "banana").unwrap();
+    let mut lu_banana = get_last_update(&api_agent, "banana").unwrap();
     sleep(Duration::from_millis(poll_speed));
     let lu_wzt = get_last_update(&api_agent, "warzone trinidad").unwrap();
     let mut update_running: bool = lu_banana.lastupdate > lu_wzt.lastupdate;
@@ -405,27 +376,30 @@ fn main() {
         info!("Update has not begun, waiting for banana");
         while !update_running {
             sleep(Duration::from_millis(poll_speed));
-            match check_for_update(
-                &api_agent,
-                poll_speed,
-                &Trigger {
-                    region: "banana".to_string(),
-                    target: None,
-                    lastupdate: lu_banana.lastupdate,
-                    updated_ping: false,
-                    waiting_ping: false,
-                    comment: None,
-                },
-            ) {
-                Result::Ok(u) => update_running = u,
-                Result::Err(_) => warn!("Faile to fetch."),
+            match get_last_update(&api_agent, "banana".to_string().borrow()) {
+                Result::Ok(region) => {
+                    if region.lastupdate > lu_banana.lastupdate {
+                        info!("Update has started.");
+                        lu_banana = region;
+                        break;
+                    }
+                }
+                Err(_) => {
+                    warn!("Fetch failed!");
+                }
             }
         }
-        info!("Update has started.");
     }
     // Main loop
     for trigger in trigger_data {
-        let spinner_msg = format!("Waiting for {}...", &trigger.region);
+        let spinner_msg = format!(
+            "Waiting for {}... ({})",
+            &trigger.region,
+            &trigger
+                .comment
+                .clone()
+                .unwrap_or_else(|| "No comment".to_string())
+        );
         let mut _spinner = Spinner::new(spinners::Cute, spinner_msg, Color::Cyan);
         let comment = trigger.comment.clone().unwrap_or_else(|| "".to_string());
         if do_pings && trigger.waiting_ping {
@@ -443,32 +417,40 @@ fn main() {
         }
         loop {
             sleep(Duration::from_millis(poll_speed));
-            match check_for_update(&api_agent, poll_speed, &trigger) {
-                Result::Ok(r) => {
-                    if r {
-                        beep();
-                        let timestring = get_webhook_timestring();
-                        let comment = String::from("");
-                        let update_message = if comment == "" {
-                            format!("{} - {}", trigger.region, comment)
-                        } else {
-                            format!("UPDATE DETECTED IN {}", trigger.region.to_uppercase())
-                        };
+            let region = match get_last_update(&api_agent, &trigger.region) {
+                Result::Ok(r) => r,
+                Err(_) => {
+                    warn!("Failed to fetch!");
+                    continue;
+                }
+            };
 
-                        if do_pings && trigger.updated_ping {
-                            match api_agent
-                                .post(&webhook)
-                                .send_json(include!("updated_ping.rs"))
-                            {
-                                Result::Ok(_) => {}
-                                Result::Err(_) => {
-                                    warn!("Failed to post update webhook for {}", trigger.region)
-                                }
-                            }
+            if region.lastupdate > lu_banana.lastupdate {
+                beep();
+                let diff = region.lastupdate - lu_banana.lastupdate;
+                let s = diff % 60;
+                let m = (diff / 60) % 60;
+                let h = (diff / 60) / 60;
+                let timestring = format(format_args!("{:0>2}:{:0>2}:{:0>2}", h, m, s));
+
+                let comment = String::from("");
+                let update_message = if comment == "" {
+                    format!("{} - {}", trigger.region, comment)
+                } else {
+                    format!("UPDATE DETECTED IN {}", trigger.region.to_uppercase())
+                };
+
+                if do_pings && trigger.updated_ping {
+                    match api_agent
+                        .post(&webhook)
+                        .send_json(include!("updated_ping.rs"))
+                    {
+                        Result::Ok(_) => {}
+                        Result::Err(_) => {
+                            warn!("Failed to post update webhook for {}", trigger.region)
                         }
                     }
                 }
-                Result::Err(_) => warn!("Fetch failed!"),
             }
         }
     }
