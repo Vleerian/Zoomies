@@ -111,7 +111,7 @@ impl TriggerPrecursor {
         };
 
         let c = match capture.name("comment") {
-            Some(reg) => Some(format!("Next Target, {}! ", reg.as_str().to_string())),
+            Some(reg) => Some(reg.as_str().to_string()),
             None => None,
         };
 
@@ -336,7 +336,7 @@ fn main() {
     // Get update data
     let mut lu_banana = get_last_update(&api_agent, poll_speed, "banana").unwrap();
     let lu_wzt = get_last_update(&api_agent, poll_speed, "warzone trinidad").unwrap();
-    let mut update_running: bool = lu_banana.lastupdate > lu_wzt.lastupdate;
+    let update_running: bool = lu_banana.lastupdate > lu_wzt.lastupdate;
 
     // Fetch and sort trigger data
     let sort_time = ((precursors.len() as u64) * poll_speed) / 1000;
@@ -447,6 +447,10 @@ fn main() {
                         }
                     }
                 }
+
+                let success_msg = format!("{} {}", timestring, update_message).green().bold();
+                spinner.success(&success_msg);
+                break;
             }
         }
     }
